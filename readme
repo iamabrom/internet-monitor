@@ -1,0 +1,324 @@
+
+# LAN Internet Monitor — README
+
+A simple self-hosted internet up/down monitor for your LAN (Raspberry Pi) built with Node/Express and SQLite.  
+It continuously pings a set of targets every second, runs traceroutes every 5 minutes, stores full raw command output locally, and exposes a lightweight web dashboard that shows the last 24 hours as an aggregated timeline.
+
+---
+
+# Quick summary / elevator pitch
+- Small Node + Express app that pings targets once per second and saves results in SQLite.  
+- Traceroute runs every 5 minutes and the raw traceroute output is stored.  
+- Web UI shows a big global status and a 24-hour per-minute aggregated timeline (green/yellow/red).  
+- Designed to run on a Raspberry Pi (Bookworm recommended).  
+- Managed with `pm2` for auto-start on boot.
+
+---
+
+# Features
+- Ping targets every 1s:
+  - `google.com`
+  - `8.8.8.8`
+  - `1.1.1.1`
+  - `frontier.com`
+  - `192.168.2.1` (your LAN gateway)
+- Traceroute every 5 minutes for each target
+- Stores:
+  - timestamp
+  - target
+  - parsed fields (alive, latency, ttl)
+  - full raw command output
+- Dashboard:
+  - Big global UP/DOWN indicator
+  - Status cards with last sample per target
+  - 24-hour timeline aggregated per minute (green/yellow/red)
+  - Recent failure list with raw output
+- Works with `better-sqlite3` (recommended) or `sqlite3` fallback
+
+---
+
+# Colors / Meaning (exact UI logic)
+- **Green** — success: ≥ 90% of pings in that minute succeeded.
+- **Yellow** — warning / degraded:
+  - Partial success: 50% ≤ success < 90% in that minute.
+  - No data at all (the monitor recorded no samples for that minute) — shown as warning in current UI.
+- **Red** — fail: < 50% success in that minute.
+- **Global indicator** — shows DOWN if *any* target’s most recent sample has `alive === 0` (conservative, flips on any target failure).
+
+> Note: “red” does **not** necessarily mean the Pi (server) is down. It means the monitored *target* is not responding. If the dashboard is reachable, your Pi is running.
+
+---
+
+# Requirements (tested & recommended)
+- Raspberry Pi OS 12 (Bookworm) — 64-bit recommended
+- Node (installed via `nvm`) — Node 18 LTS recommended (or Node 20)
+- curl, git (for setup)
+- build tools: `build-essential`, `python3`, `pkg-config`
+- `libsqlite3-dev` (for `better-sqlite3`)
+- `traceroute` utility
+- `pm2` (optional but recommended for auto-start)
+
+---
+
+# Installation (copy-paste steps for Bookworm)
+
+1. Update system & install prerequisites:
+```bash
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y build-essential python3 pkg-config libsqlite3-dev traceroute sqlite3 git curl
+```
+
+2. Install `nvm` and Node:
+```bash
+# install nvm
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
+# load nvm in current shell
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+# install Node LTS
+nvm install 18
+nvm use 18
+node -v
+npm -v
+```
+
+3. Create project folder:
+```bash
+mkdir -p ~/lan-internet-monitor
+cd ~/lan-internet-monitor
+npm init -y
+```
+
+4. Add files to the folder:
+- `server.js` (recommended: uses `better-sqlite3`)
+- `server-sqlite3.js` (fallback: uses `sqlite3`)
+- `public/index.html`
+- `public/styles.css`
+- `public/app.js`
+
+(Use the file contents provided earlier — exact code for server + public files.)
+
+5. Install Node dependencies (try recommended first):
+```bash
+npm install express better-sqlite3
+```
+
+If `better-sqlite3` fails to build:
+```bash
+# try build from source
+npm install --build-from-source --verbose better-sqlite3
+```
+
+If build still fails (memory OOM), temporarily increase swap and rebuild:
+```bash
+# increase swap to 2GB temporarily
+sudo dphys-swapfile swapoff
+sudo sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=2048/' /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+
+# rebuild
+npm install --build-from-source --verbose better-sqlite3
+
+# restore swap (optional)
+sudo sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=100/' /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+```
+
+Fallback to `sqlite3` if you prefer:
+```bash
+npm remove better-sqlite3
+npm install sqlite3
+# then run the fallback server: node server-sqlite3.js
+```
+
+6. Bind server to LAN (make sure `server.js`/`server-sqlite3.js` use the listen call below):
+```js
+app.listen(PORT, '0.0.0.0', () => { /* ... */ });
+```
+
+7. Start the server:
+```bash
+# if using better-sqlite3
+node server.js
+# or fallback
+node server-sqlite3.js
+```
+
+8. Install pm2 and enable auto-start:
+```bash
+sudo npm install -g pm2
+# start app with pm2
+cd ~/lan-internet-monitor
+pm2 start server.js --name lan-monitor    # or server-sqlite3.js if using fallback
+pm2 save
+# register startup (run the printed command or run below)
+sudo env PATH=$PATH:$(dirname $(which node)) pm2 startup systemd -u $(whoami) --hp $HOME
+# save again after startup registration
+pm2 save
+```
+
+After this, pm2 should resurrect your process list automatically on reboot (see verification next).
+
+---
+
+# Verify pm2 auto start
+- Show current pm2 processes:
+```bash
+pm2 ls
+``` 
+- Check systemd service status:
+```bash
+systemctl status pm2-$(whoami)
+```
+- Reboot to test:
+```bash
+sudo reboot
+# after boot:
+pm2 ls
+```
+
+If pm2 does not start, run:
+```bash
+sudo env PATH=$PATH:$(dirname $(which node)) pm2 startup systemd -u $(whoami) --hp $HOME
+pm2 save
+```
+
+---
+
+# Database size & pruning
+At 5 targets × 1s = 5 rows/sec → ~432k rows/day. To prevent unbounded growth, prune old rows.
+
+Example prune script `prune.sh` (delete pings older than 7 days, traceroutes older than 14 days):
+```bash
+#!/bin/bash
+sqlite3 /home/pi/lan-internet-monitor/monitor.db "DELETE FROM pings WHERE ts < $(($(date +%s) - 7*24*60*60))*1000;"
+sqlite3 /home/pi/lan-internet-monitor/monitor.db "DELETE FROM traceroutes WHERE ts < $(($(date +%s) - 14*24*60*60))*1000;"
+```
+Add to crontab to run daily:
+```bash
+crontab -e
+# add line:
+10 3 * * * /home/pi/lan-internet-monitor/prune.sh >/dev/null 2>&1
+```
+
+---
+
+# Troubleshooting checklist & useful commands
+
+- Check Node version and path:
+```bash
+node -v
+npm -v
+which node
+```
+
+- Test ping/traceroute from shell:
+```bash
+ping -c 4 -W 2 google.com
+traceroute -m 5 8.8.8.8
+```
+
+- Check pm2 & app logs:
+```bash
+pm2 ls
+pm2 logs lan-monitor --lines 200
+```
+
+- Inspect latest traceroutes recorded in DB:
+```bash
+sqlite3 monitor.db "SELECT datetime(ts/1000, 'unixepoch', 'localtime') AS ts, target FROM traceroutes ORDER BY ts DESC LIMIT 5;"
+sqlite3 monitor.db "SELECT raw FROM traceroutes ORDER BY ts DESC LIMIT 1;"
+```
+
+- Check network interfaces & routing:
+```bash
+ip a
+ip route
+```
+
+- Ping your gateway (replace with your gateway IP):
+```bash
+ping -c 4 192.168.2.1
+```
+
+- Ping public IP (bypass DNS):
+```bash
+ping -c 4 1.1.1.1
+```
+
+- HTTP test:
+```bash
+curl -I --max-time 5 https://example.com
+```
+
+---
+
+# Common failure causes & diagnostics
+- **No UI / cannot reach dashboard**
+  - Check Pi is powered on and connected to LAN.
+  - `pm2 ls` shows process running?
+  - Check firewall blocking port 3000.
+- **Yellow minutes = no data or partial success**
+  - If no data: check `pm2 logs` for worker or DB errors.
+  - If partial success: packet loss/intermittent latency — check Wi-Fi/cable/router.
+- **Red across internet targets but gateway OK**
+  - Likely ISP or upstream routing problem.
+- **Gateway unreachable**
+  - Local LAN/router issue (cable unplugged, Wi-Fi down, router reboot).
+- **better-sqlite3 fails to compile**
+  - Ensure `libsqlite3-dev`, `build-essential`, `python3`, `pkg-config` are installed.
+  - Increase swap to allow compilation (temporary).
+  - Fallback to `sqlite3` package if compile still fails.
+
+---
+
+# Suggested improvements / next steps (ideas)
+- Separate color for *no-data* (use gray) vs degraded (yellow).
+- Add a dedicated gateway tile so LAN vs Internet is clearer.
+- Make global UP/DOWN use consecutive-failure threshold (e.g., 3 consecutive failures) to prevent flapping.
+- Add alerting (Telegram/Slack/pushover) for outages > N seconds.
+- Add a small GPIO LED indicator on a Pi for physical status.
+- Containerize with Docker for easier deployment elsewhere.
+- Create an endpoint with a single boolean `up/down` for Home Assistant integration.
+
+---
+
+# FAQ (short)
+- Q: Will the Pi monitor itself for outages?  
+  A: The monitor can only report while it is running and connected. If the Pi is off or disconnected, the dashboard will be unreachable — that’s a separate failure mode.
+
+- Q: Why do you store raw command output?  
+  A: Raw output helps troubleshooting (e.g., to see exact ping output, TTL, ICMP messages, traceroute hops).
+
+- Q: Do you recommend `better-sqlite3` or `sqlite3`?  
+  A: `better-sqlite3` is faster and easier for synchronous code. On Pi it sometimes needs compile steps; if that’s painful, `sqlite3` (async) is a reliable fallback.
+
+---
+
+# Where to find the code (local)
+- Project root: `~/lan-internet-monitor`
+- Files:
+  - `server.js` (recommended)
+  - `server-sqlite3.js` (fallback)
+  - `monitor.db` (SQLite DB file created at runtime)
+  - `public/index.html`
+  - `public/styles.css`
+  - `public/app.js`
+  - `prune.sh` (optional pruning script)
+
+---
+
+# License
+Use as you like. No warranty.  
+
+---
+
+If you want, I can:
+- produce a single “bootstrap” shell script that automates the *entire* install (nvm, Node, packages, files, pm2 setup) for Bookworm,
+- change the script to use Node 20 instead of 18
+- change the ping/targets or ping interval
+
+Tell me which and I’ll update the document.

@@ -1,0 +1,96 @@
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: #0f1724;
+    color: #e6eef8;
+    margin: 0;
+    padding: 16px;
+}
+
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+h1 {
+    margin-top: 0;
+}
+
+.status-grid {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.target-card {
+    min-width: 220px;
+    background: #0b1320;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+
+.big-status {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    margin: 8px 0 18px 0;
+    border-radius: 10px;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.45), rgba(10, 16, 24, 0.5));
+}
+
+.big-status .dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+}
+
+.timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.timeline-canvas {
+    height: 28px;
+    width: 100%;
+    background: #061023;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.segment {
+    height: 100%;
+    display: inline-block;
+}
+
+.success {
+    background: #19b44b;
+}
+
+.warning {
+    background: #f59e0b;
+}
+
+.fail {
+    background: #ef4444;
+}
+
+.small-muted {
+    color: #9fb0c8;
+    font-size: 13px;
+}
+
+#failures {
+    margin-top: 6px;
+}
+
+.failure-item {
+    background: rgba(255, 0, 0, 0.06);
+    padding: 8px;
+    border-radius: 6px;
+    margin: 6px 0;
+    font-family: monospace;
+}

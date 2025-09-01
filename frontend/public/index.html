@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>LAN Internet Monitor</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>LAN Internet Monitor</h1>
+    <div class="big-status" id="globalIndicator">
+      <div id="globalText">Loading...</div>
+      <div id="lastUpdate">—</div>
+    </div>
+
+    <h2>24-hour timeline (per minute aggregation)</h2>
+    <div id="timelineArea"></div>
+
+    <h3>Recent failures</h3>
+    <div id="failures"></div>
+
+    <div id="statusGrid" class="status-grid"></div>
+
+    <footer>
+      <small>Data stored locally in SQLite. Page auto-refreshes aggregation every 10s.</small>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
