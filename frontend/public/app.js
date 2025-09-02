@@ -42,13 +42,13 @@ function renderGlobalIndicator(latest) {
   const text = document.getElementById('globalText');
   const lastUpdate = document.getElementById('lastUpdate');
   text.textContent = anyDown ? 'Internet: DOWN' : 'Internet: UP';
-  el.style.borderLeft = anyDown ? '6px solid #ef4444' : '6px solid #16a34a';
+  el.style.borderLeft = anyDown ? '50px solid #ef4444' : '50px solid #16a34a';
   lastUpdate.textContent = lastTs ? `Last sample: ${new Date(lastTs).toLocaleString()}` : '';
 }
 
 function buildAggregatedTimeline(entries) {
   const now = Date.now();
-  const minutes = 24 * 60;
+  const minutes = 12 * 60;
   const bucketSize = 60 * 1000;
   const start = now - minutes * bucketSize;
   const targets = [...new Set(entries.map(e => e.target))];
@@ -119,17 +119,45 @@ function renderFailures(entries) {
   });
 }
 
+async function fetchLatestTraceroute(target) {
+  try {
+    const resp = await fetchJson(`/api/traceroute?target=${encodeURIComponent(target)}`);
+    if (!resp.ok) return null;
+    return resp.row || null;
+  } catch (e) {
+    console.error('traceroute fetch error', e);
+    return null;
+  }
+}
+
+function renderTraceroute(row) {
+  const el = document.getElementById('traceroute-1111');
+  if (!el) return;
+  if (!row) {
+    el.textContent = 'No traceroute available for 1.1.1.1';
+    return;
+  }
+  const ts = row.ts ? `Recorded: ${new Date(row.ts).toLocaleString()}\n\n` : '';
+  el.textContent = ts + (row.raw || '').trim();
+}
+
 async function refreshAll() {
   try {
     const status = await fetchJson('/api/status');
     renderStatusGrid(status.targets, status.latest);
     renderGlobalIndicator(status.latest);
 
-    const pingsResp = await fetchJson('/api/pings?hours=24');
-    const entries = pingsResp.rows;
+    // fetch last 24 hours of pings and render timeline & failures
+    const pingsResp = await fetchJson('/api/pings?hours=12');
+    const entries = pingsResp.rows || [];
     const agg = buildAggregatedTimeline(entries);
     renderTimeline(agg);
     renderFailures(entries);
+
+    // fetch latest traceroute for 1.1.1.1 and render
+    const traceRow = await fetchLatestTraceroute('1.1.1.1');
+    renderTraceroute(traceRow);
+
   } catch (e) {
     console.error(e);
   }

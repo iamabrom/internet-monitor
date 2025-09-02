@@ -14,13 +14,19 @@
       <div id="lastUpdate">—</div>
     </div>
 
-    <h2>24-hour timeline (per minute aggregation)</h2>
+    <h2>12-hour timeline (per minute aggregation)</h2>
     <div id="timelineArea"></div>
+
+    <h3>Latest Traceroute — 1.1.1.1</h3>
+    <pre id="traceroute-1111" style="white-space:pre-wrap; background:#071727; padding:12px; border-radius:6px; color:#cfeef8; max-height:320px; overflow:auto;">
+Loading traceroute...
+    </pre>
+
+    <h3>Latest Pings</h3>
+    <div id="statusGrid" class="status-grid"></div>
 
     <h3>Recent failures</h3>
     <div id="failures"></div>
-
-    <div id="statusGrid" class="status-grid"></div>
 
     <footer>
       <small>Data stored locally in SQLite. Page auto-refreshes aggregation every 10s.</small>

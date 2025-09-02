@@ -141,6 +141,15 @@ app.get('/api/traceroutes', (req, res) => {
   });
 });
 
+app.get('/api/traceroute', (req, res) => {
+  const target = req.query.target;
+  if (!target) return res.json({ ok: false, error: 'missing target' });
+  db.get('SELECT * FROM traceroutes WHERE target = ? ORDER BY ts DESC LIMIT 1', [target], (err, row) => {
+    if (err) return res.json({ ok: false, error: err.message });
+    res.json({ ok: true, row: row || null });
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`monitor server listening on http://0.0.0.0:${PORT}`);

@@ -55,7 +55,7 @@ function runPingCommand(target, cb) {
   const platform = os.platform();
   let cmd;
   // Linux (Bookworm)
-  cmd = `ping -c 1 -W 2 ${target}`;
+  cmd = `ping -c 1 -W 1 ${target}`;
   exec(cmd, { timeout: 5000, maxBuffer: 200 * 1024 }, (err, stdout, stderr) => {
     const raw = (stdout || '') + (stderr || '');
     let time_ms = null;
@@ -94,7 +94,7 @@ function startPingLoop() {
             console.error('DB insert ping error', e);
           }
         });
-      }, 1000);
+      }, 2000);
     }, idx * 200);
   });
 }
@@ -126,7 +126,7 @@ function startTracerouteLoop() {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/pings', (req, res) => {
-  const hours = parseFloat(req.query.hours) || 24;
+  const hours = parseFloat(req.query.hours) || 12;
   const since = Date.now() - Math.max(1, hours) * 60 * 60 * 1000;
   const limit = parseInt(req.query.limit || '200000', 10);
   const rows = db.prepare('SELECT * FROM pings WHERE ts >= ? ORDER BY ts ASC LIMIT ?').all(since, limit);
@@ -146,6 +146,17 @@ app.get('/api/traceroutes', (req, res) => {
   const limit = parseInt(req.query.limit || '10', 10);
   const rows = db.prepare('SELECT * FROM traceroutes ORDER BY ts DESC LIMIT ?').all(limit);
   res.json({ ok: true, rows });
+});
+
+app.get('/api/traceroute', (req, res) => {
+  const target = req.query.target;
+  if (!target) return res.json({ ok: false, error: 'missing target' });
+  try {
+    const row = db.prepare('SELECT * FROM traceroutes WHERE target = ? ORDER BY ts DESC LIMIT 1').get(target);
+    res.json({ ok: true, row: row || null });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
